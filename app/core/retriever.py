@@ -1,3 +1,5 @@
+import os
+import google.generativeai as genai
 import pickle
 from pathlib import Path
 import faiss
@@ -16,6 +18,11 @@ DATA_DIR = Path("data")
 class VectorRetriever:
     def __init__(self):
         logger.info("Initializing VectorRetriever...")
+
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY is not found in .env file")
+
         self.model = SentenceTransformer(EMBEDDING_MODEL)
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size = 1000,
@@ -25,6 +32,10 @@ class VectorRetriever:
         self.index = None
         self.chunk_map = {} # Maps index ID to text chunk
         logger.info("VectorRetriever initialized.")
+
+        self.llm = genai.GenerativeModel('gemini-2.5-flash')
+        logger.info("VectorRetreiver initialized with Google Gemini.")
+
 
     def _chunk_documents(self, documents: list[Document]) -> list[Document]:
         """Splits documents into smaller chunks."""
@@ -101,6 +112,38 @@ class VectorRetriever:
         logger.info(f"Found {len(results)} relevant results")
         return results
 
+
+    def generate_response(self, query: str, chunks: list[Document]) -> str:
+        # Generate response using LLm
+        # Combine the content of all the chunks into a single string for the context
+
+        context = "\n---\n".join([chunk.content for chunk in chunks])
+
+        # Tell LLM how to behave
+        prompt_template = f"""
+        You are a helpful assistant who answers questions based ONLY on the provided context.
+        Your goal is to provide a clear and concise answer.
+        If the information to answer the question is not in the context, you MUST say "I cannot answer this question based on the provided information."
+
+        CONTEXT:
+        {context}
+
+        QUESTION:
+        {query}
+
+        ANSWER:
+        """
+
+        logger.info("Generating response with LLM...")
+        
+        try:
+            response = self.llm.generate_content(prompt_template)
+            return response.text
+        except Exception as e:
+            logger.error(f"Error during the LLM generation: {e}.")
+            return "An error has occured while generating response"
+
+    
         
         
 

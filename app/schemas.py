@@ -13,3 +13,7 @@ class QueryResponse(BaseModel):
     query: str
     relevant_chunks: List[DocumentResponse]
 
+class AnswerResponse(BaseModel):
+    query: str
+    answer: str
+

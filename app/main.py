@@ -1,8 +1,11 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException
 from loguru import logger
 
 from .core.retriever import VectorRetriever, INDEX_PATH
-from .schemas import QueryRequest, QueryResponse, DocumentResponse
+from .schemas import QueryRequest, QueryResponse, DocumentResponse, AnswerResponse
 
 
 # Initialize the FastAPI app
@@ -28,7 +31,7 @@ async def startup_event():
         retriever.load_index()
 
 
-@app.post("/query", response_model=QueryResponse)
+@app.post("/query", response_model=AnswerResponse)
 def query_documents(request: QueryRequest):
     """
     Accepts a user query and returns the most relevant document chunks.
@@ -37,6 +40,25 @@ def query_documents(request: QueryRequest):
         raise HTTPException(status_code=503, detail="Index not ready. Please try again.")
     
     try:
+        relevant_chunks = retriever.search(query=request.query, k=5)
+
+        if not relevant_chunks:
+            return AnswerResponse(
+                query=request.query,
+                answer="No relevant information has been found in the documents for this question..."
+            )
+        
+        # Kullanicinin querysi ile relevant chunklari LLM'e yolladik
+        answer = retriever.generate_response(query=request.query, chunks=relevant_chunks)
+        return AnswerResponse(query=request.query, answer=answer)
+    
+    except Exception as e:
+        logger.error(f"An error has occured during the query processing {e}.")
+        raise HTTPException(status_code=500, detail= "An error has occured during the query processing.")
+
+
+        #RAG pipeline without LLM
+        """
         results = retriever.search(query=request.query, k=5)
         # Convert Document objects to DocumentResponse Pydantic models
         response_chunks = [DocumentResponse(content=doc.content, metadata=doc.metadata) for doc in results]
@@ -45,6 +67,7 @@ def query_documents(request: QueryRequest):
     except Exception as e:
         logger.error(f"An error occurred during query processing: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred.")
+        """
 
 @app.get("/")
 def read_root():
