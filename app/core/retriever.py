@@ -8,6 +8,13 @@ from loguru import logger
 from sentence_transformers import SentenceTransformer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+# Semantic Chunking icin
+from langchain_experimental.text_splitter import SemanticChunker
+
+# --- MultiQuery icin ---
+from langchain.retrievers.multi_query import MultiQueryRetriever
+from langchain_google_genai import ChatGoogleGenerativeAI
+
 from .parser import parse_documents, Document
 
 INDEX_PATH = Path("faiss_index.bin")
@@ -24,11 +31,20 @@ class VectorRetriever:
             raise ValueError("GOOGLE_API_KEY is not found in .env file")
 
         self.model = SentenceTransformer(EMBEDDING_MODEL)
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size = 1000,
-            chunk_overlap = 200,
-            length_function = len
+
+        # ---Semantic Chunking icin iptal edildi---
+        # self.text_splitter = RecursiveCharacterTextSplitter(
+        #     chunk_size = 1000,
+        #     chunk_overlap = 200,
+        #     length_function = len
+        # )
+
+        self.text_splitter = SemanticChunker(
+            self.model, 
+            breakpoint_threshold_type="percentile"
         )
+
+
         self.index = None
         self.chunk_map = {} # Maps index ID to text chunk
         logger.info("VectorRetriever initialized.")
@@ -111,7 +127,47 @@ class VectorRetriever:
 
         logger.info(f"Found {len(results)} relevant results")
         return results
+    
+    def search_with_multi_query(self, query: str) -> list[Document]:
+        """
+        Generates query variations and retrieves chunks from all of them.
+        """
+        if self.index is None:
+            logger.error("Index is not built or loaded. Cannot perform search.")
+            return []
 
+        # 1. Initialize the LLM for the LangChain retriever component
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+
+        # 2. Create the MultiQueryRetriever
+        # It uses the base retriever's search capabilities (self) and the LLM
+        # to generate and run the new queries.
+        multi_query_retriever = MultiQueryRetriever.from_llm(
+            retriever=self.as_retriever(), llm=llm
+        )
+        
+        # 3. Invoke the retriever to get the unique, relevant documents
+        logger.info(f"Performing multi-query search for: '{query}'")
+        # The invoke method handles everything: generating queries, searching,
+        # and combining the results.
+        retrieved_chunks = multi_query_retriever.invoke(query)
+        
+        logger.info(f"Found {len(retrieved_chunks)} relevant chunks via multi-query.")
+        return retrieved_chunks
+    
+    # Adding this helper method for the retriever to work with LangChain
+    def as_retriever(self):
+        # The LangChain MultiQueryRetriever expects a retriever object that
+        # conforms to its standard. This helper makes our class compatible.
+        from langchain.schema.retriever import BaseRetriever
+        class CustomRetriever(BaseRetriever):
+            def _get_relevant_documents(self, query: str, *, run_manager) -> list[Document]:
+                return self.search(query)
+        
+        CustomRetriever.search = self.search
+        return CustomRetriever()
+
+    #....
 
     def generate_response(self, query: str, chunks: list[Document]) -> str:
         # Generate response using LLm
