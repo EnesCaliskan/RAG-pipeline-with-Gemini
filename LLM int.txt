@@ -1,0 +1,16 @@
+1 - https://aistudio.google.com/
+
+2- Create API key
+
+3- Install libs 
+
+pip install google-generativeai python-dotenv
+
+4- Create .env file for api key
+
+GOOGLE_API_KEY="YOUR_API_KEY_HERE"
+
+5- Add this to .gitignore so you don't commit the key
+
+# in .gitignore
+.env

@@ -1,0 +1,48 @@
+1- Projeyi olustur
+
+rag_casestudy/
+├── app/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── parser.py
+│   │   └── retriever.py
+│   └── schemas.py
+├── data/
+└── .gitignore
+
+2- Python env 
+
+python -m venv venv
+source venv\Scripts\activate
+
+
+ctrl+shift+P
+Python: select interpreter
+
+3- Libs
+
+pip install "fastapi[all]" pypdf sentence-transformers faiss-cpu "langchain==0.1.4" loguru
+
+4- Requirements
+
+pip freeze > requirements.txt
+
+5- .gitignore ekle
+
+venv/
+__pycache__/
+*.bin
+*.pkl
+data/
+
+6- Calistirma
+
+uvicorn app.main:app --reload
+
+
+7- API Interface
+
+http://127.0.0.1:8000/docs 
+
